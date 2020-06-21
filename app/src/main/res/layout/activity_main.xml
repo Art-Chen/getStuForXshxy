@@ -19,7 +19,7 @@
             android:layout_height="wrap_content"
             android:hint="@string/stuid"
             android:inputType="text"
-            android:textSize="20sp" />
+            android:textSize="15sp" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -36,7 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/stuPassword"
-            android:textSize="20sp"
+            android:textSize="15sp"
             android:inputType="textPassword" />
     </com.google.android.material.textfield.TextInputLayout>
     <Button
