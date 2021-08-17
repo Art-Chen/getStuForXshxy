@@ -6,6 +6,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.Toast;
 
@@ -32,12 +33,12 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Button login = findViewById(R.id.bt_login);
+        TextInputEditText et_name = findViewById(R.id.et_name);
+        TextInputEditText et_pass = findViewById(R.id.et_pass);
         login.setOnClickListener((newValue) -> new Thread() {
             public void run() {
                 try {
                     // 获取账号和密码
-                    TextInputEditText et_name = findViewById(R.id.et_name);
-                    TextInputEditText et_pass = findViewById(R.id.et_pass);
                     String name = et_name.getText().toString().trim();
                     String pass = et_pass.getText().toString().trim();
                     // 组建post数据
@@ -63,8 +64,35 @@ public class MainActivity extends AppCompatActivity {
                         InputStream in = conn.getInputStream();
                         cookieVal = conn.getHeaderField("Set-Cookie");
                         String content = StreamTools.readString(in);
-                        showToast(content);
+                        if (isJSONType(content)) {
+                            JSONObject jsonObject = new JSONObject(content);
+                            showToast("服务器消息: " + jsonObject.getString("data"));
+                        } else {
+                            showToast(content);
+                        }
                     }
+
+                    // Post ToStudentCheckIn
+                    conn = (HttpURLConnection) new URL("http://yx.xshxy.cn:802/data/ToStudentCheckIn")
+                            .openConnection();
+                    if (cookieVal != null) {
+                        conn.setRequestProperty("Cookie", cookieVal); //继承Cookie
+                    }
+                    conn.setConnectTimeout(5000); // 超时时间
+                    conn.setRequestMethod("POST");
+                    conn.setRequestProperty("Referer", "http://yx.xshxy.cn:802/rinfo");
+                    conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+
+                    conn.setDoOutput(true);
+                    conn.getOutputStream().write(data.getBytes());
+                    if (conn.getResponseCode() == 200) {
+                        InputStream in = conn.getInputStream();
+                        cookieVal = conn.getHeaderField("Set-Cookie");
+                        String content = StreamTools.readString(in);
+                        Log.i("Art_Chen","Post ToStudentCheckIn return: " + content);
+                    }
+
+
                     String getStu = "http://yx.xshxy.cn:802/data/getStuForShow";
                     URL getStuUrl = new URL(getStu);
 
@@ -79,23 +107,28 @@ public class MainActivity extends AppCompatActivity {
                     conn1.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
                     conn1.setDoOutput(true);
                     conn1.getOutputStream().write(data.getBytes());
-                    String resultData = "";
+                    StringBuilder resultData = new StringBuilder();
                     if (conn.getResponseCode() == 200) {
                         InputStream is = conn1.getInputStream();
                         InputStreamReader isr = new InputStreamReader(is);
                         BufferedReader bufferReader = new BufferedReader(isr);
                         String inputLine = "";
                         while ((inputLine = bufferReader.readLine()) != null) {
-                            resultData += inputLine + "\n";
+                            resultData.append(inputLine).append("\n");
                         }
-                        Analysis(resultData);
+                        Analysis(resultData.toString());
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
-                    showToast("Art_Chen: 连接服务器时发生错误");
+                    showToast("Art_Chen: 连接服务器时发生错误 " + e.getMessage());
                 }
             };
         }.start());
+    }
+
+    public static boolean isJSONType(String str) {
+        str = str.trim();
+        return (str.startsWith("{") && str.endsWith("}")) || (str.startsWith("[") && str.endsWith("]"));
     }
 
     /**
@@ -108,38 +141,42 @@ public class MainActivity extends AppCompatActivity {
         // 初始化list数组对象
         ArrayList<HashMap<String, Object>> list = new ArrayList<>();
         JSONObject jsonObject = new JSONObject(jsonStr);
-        JSONObject dataObj = (JSONObject) jsonObject.get("data");
-        // 初始化map数组对象
-        HashMap<String, Object> map = new HashMap<>();
-        map.put("姓名", dataObj.getString("studentName"));
-        map.put("性别", dataObj.getString("sex"));
-        map.put("宿舍楼", dataObj.getString("dorPath"));
-        map.put("学号", dataObj.getString("sid"));
-        map.put("专业", dataObj.getString("majorName"));
-        map.put("班级", dataObj.getString("className"));
-        map.put("欠费金额(学费)", dataObj.getString("arrearsMoney"));
-        list.add(map);
-        runOnUiThread(() -> {
-            AlertDialog.Builder listDialog =
-                    new AlertDialog.Builder(MainActivity.this);
-            listDialog.setTitle("结果");
-            for (HashMap<String, Object> m : list) {
-                int i = 0;
-                for (String k : m.keySet()) {
-                    show[i]=(k + " : " + m.get(k));
-                    i++;
+        if (!isJSONType((String) jsonObject.get("data"))) {
+            showToast("Art_Chen 学生信息获取失败, 原因为: " + jsonObject.get("data"));
+        } else {
+            JSONObject dataObj = (JSONObject) jsonObject.get("data");
+            // 初始化map数组对象
+            HashMap<String, Object> map = new HashMap<>();
+            map.put("姓名", dataObj.getString("studentName"));
+            map.put("性别", dataObj.getString("sex"));
+            map.put("宿舍楼", dataObj.getString("dorPath"));
+            map.put("学号", dataObj.getString("sid"));
+            map.put("专业", dataObj.getString("majorName"));
+            map.put("班级", dataObj.getString("className"));
+            map.put("欠费金额(学费)", dataObj.getString("arrearsMoney"));
+            list.add(map);
+            runOnUiThread(() -> {
+                AlertDialog.Builder listDialog =
+                        new AlertDialog.Builder(MainActivity.this);
+                listDialog.setTitle("结果");
+                for (HashMap<String, Object> m : list) {
+                    int i = 0;
+                    for (String k : m.keySet()) {
+                        show[i] = (k + " : " + m.get(k));
+                        i++;
+                    }
                 }
-            }
-            listDialog.setItems(show, (DialogInterface.OnClickListener) (dialog, which) -> {
-                ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                ClipData mClipData = ClipData.newPlainText("Art_Chen", show[which]);
-                cm.setPrimaryClip(mClipData);
-                Toast.makeText(MainActivity.this,
-                        "已复制到剪切板",
-                        Toast.LENGTH_SHORT).show();
+                listDialog.setItems(show, (DialogInterface.OnClickListener) (dialog, which) -> {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    ClipData mClipData = ClipData.newPlainText("Art_Chen", show[which]);
+                    cm.setPrimaryClip(mClipData);
+                    Toast.makeText(MainActivity.this,
+                            "已复制到剪切板",
+                            Toast.LENGTH_SHORT).show();
+                });
+                listDialog.show();
             });
-            listDialog.show();
-        });
+        }
 
     }
 
